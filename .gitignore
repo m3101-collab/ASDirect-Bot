@@ -1,0 +1,12 @@
+#Python virtualenv
+.venv
+#Vscode stuff
+.vscode
+#Python caches
+**/__pycache__
+#Generated reports
+reports
+#Logs
+**.log
+#Top-level jsons
+/*.json

@@ -5,6 +5,8 @@ import asyncio
 
 class Command(TypedDict):
     text_content:str # The reference that will be shown
+    title:str # The title of the embed that'll be shown
+    desription:str # The description that'll appear on the command
 
 @dataclasses.dataclass()
 class Database:

@@ -1,6 +1,6 @@
 import unittest
 import unittest.mock as mock
-from main.reference_command_management import persistence
+from asdirect_bot.reference_command_management import persistence
 import asyncio
 import time
 import sys

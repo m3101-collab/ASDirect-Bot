@@ -27,7 +27,7 @@ GUILD_ID = 0
 ## Dictionary for making user creation easier
 USER_ROLES_BY_PRIVILEGE = {
     'command-editing':{EDITCOMMAND_ROLE},
-    'reference':{REFERENCE_ROLE}
+    'reference command':{REFERENCE_ROLE}
 }
 
 def make_interaction(ctx:Context)->NonCallableMagicMock:

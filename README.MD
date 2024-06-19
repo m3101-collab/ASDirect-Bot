@@ -54,3 +54,11 @@ gitGraph
 Assure all the required dependencies are installed by running `pip install -r requirements.txt`
 
 Behaviour/acceptance testing can be run by simply calling `behave` (it'll use the default configurations in `behave.ini`).
+
+Unit tests/code coverage can be assessed by running
+
+```
+coverage run -m unittest discover -s ./src/test/unittests -p test*.py -t ./src
+coverage report
+coverage lcov -o lcov.info
+```

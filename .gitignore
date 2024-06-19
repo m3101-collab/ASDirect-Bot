@@ -10,3 +10,11 @@ reports
 **.log
 #Top-level jsons
 /*.json
+#Test and coverage info
+lcov.info
+.coverage
+#distribution/build files
+dist
+**/*.egg-info
+#environment variables/bot token
+.env

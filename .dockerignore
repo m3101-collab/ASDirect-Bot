@@ -1,0 +1,20 @@
+#Python virtualenv
+.venv
+#Vscode stuff
+.vscode
+#Python caches
+**/__pycache__
+#Generated reports
+reports
+#Logs
+**.log
+#Top-level jsons
+/*.json
+#Test and coverage info
+lcov.info
+.coverage
+#distribution/build files
+dist
+**/*.egg-info
+#environment variables/bot token
+.env

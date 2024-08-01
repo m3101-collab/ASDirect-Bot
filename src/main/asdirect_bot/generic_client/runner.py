@@ -13,4 +13,7 @@ def main():
             "asdirect_bot.reference_command_management.discord_commands"
         }
     )
-    client.run(token)
+    client.run(token,log_handler=client.log_handler)
+
+if __name__ == "__main__":
+    main()

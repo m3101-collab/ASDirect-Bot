@@ -1,3 +1,4 @@
+
 FROM python:3.12-slim as build
 WORKDIR /build
 RUN pip install --no-cache-dir build
@@ -7,6 +8,8 @@ RUN python -m build .
 
 FROM python:3.12-slim as release
 WORKDIR /app
+COPY quick_requirements.txt ./
+RUN pip install --no-cache-dir -r ./quick_requirements.txt
 COPY --from=build /build/dist/*.whl ./
 RUN pip install --no-cache-dir ./*.whl
 RUN rm *.whl

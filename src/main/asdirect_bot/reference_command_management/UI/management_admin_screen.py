@@ -8,7 +8,7 @@ from ..sync_commands import sync_guild
 commandname = re.compile(r'[a-z0-9_]+')
 
 class View(dc.ui.View):
-    def __init__(self, client:Client, *, timeout: float | None = 180):
+    def __init__(self, client:Client, *, timeout: float|None = None):
         super().__init__(timeout=timeout)
         self.client=client
     @dc.ui.button(
@@ -43,6 +43,11 @@ class CommandModal(dc.ui.Modal, title = "Command Management"):
         style=dc.TextStyle.paragraph,
         placeholder="Polarising topics are banned.\nMore information can be found in our FAQ: <#1127949243840204831>"
     )
+    image = dc.ui.TextInput(
+        label="Image URL (Optional)",
+        style=dc.TextStyle.short,
+        required=False
+    )
 
     def __init__(self, client:Client, *, title: str = "Command Management", timeout: float | None = None) -> None:
         super().__init__(title=title, timeout=timeout)
@@ -60,7 +65,8 @@ class CommandModal(dc.ui.Modal, title = "Command Management"):
                 Command(
                     title=self.cmd_title.value,
                     text_content=self.reference.value,
-                    description=self.description.value
+                    description=self.description.value,
+                    image=self.image.value
                 ),
                 self.name.value
             )

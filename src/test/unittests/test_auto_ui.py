@@ -3,7 +3,7 @@ import unittest.mock as mock
 import asyncio
 import time
 import sys
-import generic_bot_utils.auto_ui as aui
+import asdirect_bot.generic_bot_utils.auto_ui as aui
 import dataclasses
 
 class AutoUITest(unittest.IsolatedAsyncioTestCase):

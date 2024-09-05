@@ -4,14 +4,24 @@ from .persistence import Command
 
 def gen_command_callback(command:Command):
     async def handle_interaction(interaction:dc.Interaction):
-        await interaction.response.send_message(
-            embed=dc.Embed(
-                title = command['title'],
-            ).add_field(
-                name = "",
-                value = command['text_content']
+        if command['image'] is None:
+            await interaction.response.send_message(
+                embed=dc.Embed(
+                    title = command['title'],
+                ).add_field(
+                    name = "",
+                    value = command['text_content']
+                )
             )
-        )
+        else:
+            await interaction.response.send_message(
+                embed=dc.Embed(
+                    title = command['title'],
+                ).add_field(
+                    name = "",
+                    value = command['text_content']
+                ).set_image(url=command['image'])
+            )
     return handle_interaction
 
 async def sync_guild(client:Client, guild_id:int):

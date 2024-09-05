@@ -18,3 +18,4 @@ dist
 **/*.egg-info
 #environment variables/bot token
 .env
+persistence

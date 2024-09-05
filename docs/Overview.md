@@ -1,11 +1,26 @@
 # ASDirect Bot Feature Overview/Manual
 
+## Permission issues
+
+Each module needs certain permissions. In summary:
+
+To send messages, the bot needs
+
+- Permission to *see* the channel (otherwise it'll yield a missing access error)
+- Permission to *send messages* in the channel (otherwise it'll yield a missing permissions error)
+
+To edit user permissions it needs
+
+- Permission to *see* the channel
+- Permission to *edit user permissions* **in that specific channel** (or server-wide permissions, which are usually a bad idea).
+- To have its role positioned above the roles it's editing in the role list.
+
 ## Known Issues
 
 - The bot will trigger monthly events in the wrong day (one day after, if it's a month with 30 days, one day before otherwise) if there are literally no other events between the day of setting the event and the first trigger.
 - The bot will trigger any events in the wrong hour in case of DST/other leap hour situations.
 - UI modals might freeze due do discord fuckery. The commands will still be executed in most cases.
-- Setting role permissions in a channel will result in other inherited (`/`, rather than `X` or `V` in the settings menu) permissions resolving into `X`or `V`. I.e. if the user does not, in practiece, have access to a certain permission, and the permission isn't set, it'll be set to "disallowed".
+- Setting role permissions in a channel will result in other inherited (`/`, rather than `X` or `V` in the settings menu) permissions resolving into `X`or `V`. I.e. if the user does not, in practice, have access to a certain permission, and the permission isn't set, it'll be set to "disallowed".
 
 ## Structure
 
@@ -87,7 +102,7 @@ flowchart TB
 
     A--Has one or more-->B
     B-.Can be triggered<br>by one or more.->C
-    B-.Execute<br>one or more.->D
+    B-.Executes<br>one or more.->D
 ```
 
 Events (e.g. Weekly Wonderings) have steps, which can be interpreted as "Phases". A step is a bundle of actions associated with triggering schedules.
@@ -115,7 +130,7 @@ Steps:
         - Set permissions:
             - Channel: `#weekly-wonderings`
             - Role: Citizen
-            - Permissions to remove?
+            - Permissions to remove:
                 - Send messages
 
 ### Scheduling
@@ -137,7 +152,7 @@ Schedule triggers can activate steps, but not inhibit them. Come to think of it,
 
 #### Send a message
 
-Will send a message at the specified as long as the bot has the required permissions.
+Will send a message at the specified channel as long as the bot has the required permissions.
 
 The message can also pull from a pool of messages (i.e. for Weekly Wonderings) and insert it into a template message.
 

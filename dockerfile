@@ -1,5 +1,6 @@
 FROM python:3.12-slim as build
 WORKDIR /build
+RUN apt update && apt install -y build-essential
 RUN pip install --no-cache-dir build
 COPY ./src/ ./src/
 COPY ./pyproject.toml ./
@@ -7,6 +8,8 @@ RUN python -m build .
 
 FROM python:3.12-slim as release
 WORKDIR /app
+RUN apt update && apt install -y build-essential
+RUN ln -sf /usr/share/zoneinfo/Etc/GMT+3 /etc/localtime
 COPY --from=build /build/dist/*.whl ./
 RUN pip install --no-cache-dir ./*.whl
 RUN rm *.whl

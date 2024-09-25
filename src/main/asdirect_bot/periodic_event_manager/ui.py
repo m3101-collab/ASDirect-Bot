@@ -10,7 +10,7 @@ class ChannelSelectView(aui.BaseEditView[int]):
             return f"<#{self.selected}>"
     def __init__(self, cb: Callable[[dc.Interaction, Set[int]], Coroutine[None, None, None]], type: aui.Type = None, content: str = "", *, req: str = "", timeout: float|None = None, original_interaction: dc.Interaction[dc.Client]):
         super().__init__(cb, type, content, req=req, timeout=timeout, original_interaction=original_interaction)
-        self.roles = original_interaction.guild.channels #Yes, this is a perfect copy of the other one
+        self.roles = (original_interaction.guild.channels) #Yes, this is a perfect copy of the other one
         #I could do a generic thing, but at this point I just want to get this to work
         self.roles = {
             role.name:role
@@ -18,7 +18,7 @@ class ChannelSelectView(aui.BaseEditView[int]):
         }
         self.roleoptions = [
             dc.SelectOption(label=name,value=name)
-            for name in self.roles
+            for name in sorted(self.roles)
         ]
         self.page = 0
         self.totalpages = ((len(self.roles)-1)//24)+1
@@ -64,7 +64,7 @@ class RoleSetView(aui.BaseEditView[List[int]]):
         }
         self.roleoptions = [
             dc.SelectOption(label=name,value=name)
-            for name in self.roles
+            for name in sorted(self.roles)
         ]
         self.page = 0
         self.totalpages = ((len(self.roles)-1)//24)+1
@@ -101,7 +101,7 @@ class ArbitrarySetView[str](aui.BaseEditView[List[str]]):
             return f"No {self.objectname} have been selected yet.\nDue to limitations of Discord bots' UI tools, you must select the {self.objectname} one at a time."
         else:
             return ",".join([f"{id}" for id in self.selected])+f"\nDue to limitations of Discord bots' UI tools, you must select the {self.objectname} one at a time."
-    def __init__(self, cb: Callable[[dc.Interaction, Set[int]], Coroutine[None, None, None]], objectname:str, choices:List[str], type: aui.Type = None, content: str = "", *, req: str = "", timeout: float|None = None, original_interaction: dc.Interaction[dc.Client]):
+    def __init__(self, cb: Callable[[dc.Interaction, Set[str]], Coroutine[None, None, None]], objectname:str, choices:List[str], type: aui.Type = None, content: str = "", *, req: str = "", timeout: float|None = None, original_interaction: dc.Interaction[dc.Client]):
         super().__init__(cb, type, content, req=req, timeout=timeout, original_interaction=original_interaction)
         self.objectname=objectname
         self.roles = choices
@@ -131,17 +131,18 @@ class ArbitrarySetView[str](aui.BaseEditView[List[str]]):
         )
     def confirmed(self):
         return self.selected if len(self.selected)>0 else None
-    async def selected_cb(self,opts:List[str],interaction:dc.Interaction):
+    async def selected_cb(self,opts:List[str],interaction:dc.Interaction,respond:bool=True):
         if opts[0] == NEXTPAGE:
             self.page+=1
             self.page%=self.totalpages
             self.setup_options()
         else:
             self.selected=self.selected.union({opts[0]})
-        await interaction.response.edit_message(
-            content=self.content+'\n'+self.describe(),
-            view=self
-        )
+        if respond:
+            await interaction.response.edit_message(
+                content=self.content+'\n'+self.describe(),
+                view=self
+            )
 from . import persistence as pers
 
 @aui.auto_view_for[pers.Event](pers.Event)

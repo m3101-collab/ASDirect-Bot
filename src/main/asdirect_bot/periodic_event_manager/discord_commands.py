@@ -1,5 +1,5 @@
 import logging
-from typing import Type
+from typing import Type,Callable,Any,Set,Coroutine
 from ..generic_client import Client
 import discord as dc
 from . import ui
@@ -8,7 +8,13 @@ from . import scheduler
 import os
 import pathlib as pl
 import json
+from ..permissions_mgt.persistence import permission,Permissions
+from ..periodic_event_manager.ui import ArbitrarySetView
+
 GENERIC_CLIENT_MODULE_NAME="EventManager"
+
+CREATE_EVENT_PERM = permission("Create and manage events/scheduled commands","CREVT")
+MSG_POOL_PERM = permission("Create and manage message pools for events","CREVTP")
 async def setup(client:Client, logger: logging.Logger):
     logger.info("Setting up event management commands.")
     events_path = os.environ.get("EVENTS_PATH")
@@ -20,7 +26,7 @@ async def setup(client:Client, logger: logging.Logger):
             client.periodic_events = json.load(i_f)
     else:
         with open(events_path,'w') as o_f:
-            json.dump(client.periodic_events,o_f)
+            json.dump(client.periodic_events,o_f,indent=4)
     client.periodic_events_path = events_path
     client.scheduler = scheduler.Scheduler(logger)
     await client.scheduler.reschedule(client)
@@ -39,6 +45,11 @@ async def setup(client:Client, logger: logging.Logger):
         description="Manage message pools"
     )(message_pools(client))
 
+    eventcommands.command(
+        name="toggle",
+        description="Opens an interface to toggle events on and off"
+    )(enable_disable_events(client))
+
     client.command_tree.add_command(eventcommands)
 async def test(interaction:dc.Interaction):
     await interaction.response.send_message(
@@ -46,11 +57,103 @@ async def test(interaction:dc.Interaction):
             type='image'
         ).set_image(url="https://media.discordapp.net/attachments/638765872306978837/1254198989373575380/vK6ME3h.png?ex=66da2e54&is=66d8dcd4&hm=506a12c906f4198bff57d94b4f6e95fe055352de752be14eecf65be63f47c047")
     )
+
+class EnableDisableView(ArbitrarySetView):
+    def describe(self) -> str:
+        return (
+            "Current events' automation/scheduling status:\n"
+            +
+            '\n'.join([f"- {evt}: **{'✅Enabled' if evt in self.enabled else '❌ Disabled'}**" for evt in self.events])
+            +
+            "\nSelect an event below to toggle its status:"
+        )
+    def __init__(self, client:Client, events:Set[str], enabled:Set[str], cb: Callable[[dc.Interaction[Client], None], Coroutine[None, None, None]], type: Type = None, *, req: str = "", timeout: float | None = None, original_interaction: dc.Interaction[dc.Client]):
+        super().__init__(self.done_cb, "permission", events, type, "", req=req, timeout=timeout, original_interaction=original_interaction)
+        self.events=events
+        self.enabled=enabled
+        self.client=client
+        self.final_cb = cb
+    def confirmed(self):
+        return []
+    async def done_cb(self,interaction:dc.Interaction,sel:Set[str]):
+        persistence:pers.Persistence = self.client.periodic_events
+        guild = str(interaction.guild_id)
+        if guild not in persistence["servers"]:
+            await interaction.response.edit_message(
+                content="This server has no configured events.",
+                view=None
+            )
+            return
+        for event in self.events:
+            persistence['servers'][guild]['events'][event]['enabled']=event in self.enabled
+        persistence_path = os.environ.get("EVENTS_PATH")
+        if persistence_path is None:
+            raise LookupError("Environment variable EVENTS_PATH not found!")
+        with open(persistence_path,'w') as o_f:
+            json.dump(persistence,o_f,indent=4)
+        sched:scheduler.Scheduler = self.client.scheduler
+        await sched.reschedule(self.client)
+        await self.final_cb(interaction,None)
+    async def selected_cb(self,sel:Set[str],interaction:dc.Interaction):
+        selected = sel[0]
+        if selected in self.enabled:
+            self.enabled.remove(selected)
+        else:
+            self.enabled.add(selected)
+        await interaction.response.edit_message(
+            content = self.describe()
+        )
+def enable_disable_events(client:Client):
+    async def closure(interaction:dc.Interaction):
+        allowed,why = Permissions.check(client,interaction,{CREATE_EVENT_PERM.identifier})
+        if not allowed:
+            client.logger.warning(f"Blocked attempt to run enable_disable_events by uid {interaction.user.id} ({interaction.user.name}/{interaction.user.display_name})")
+            await interaction.response.send_message(
+                content=(
+                    "You're not allowed to run this command. This attempt has been logged.\n"
+                    f"Reason: {why}"
+                ),
+                ephemeral=True
+            )
+            return
+        persistence:pers.Persistence = client.periodic_events
+        view = EnableDisableView(
+            client,
+            set(persistence.get('servers',{})
+            .get(str(interaction.guild_id),{})
+            .get('events',{})),
+            set(
+                event
+                for event in 
+                persistence.get('servers',{})
+                .get(str(interaction.guild_id),{})
+                .get('events',{})
+                if persistence.get('servers',{})
+                .get(str(interaction.guild_id),{})
+                .get('events',{}).get(event,{}).get('enabled',False)
+            ),
+            done,
+            original_interaction=interaction
+        )
+        await interaction.response.send_message(
+            ephemeral=True,
+            content=view.describe(),
+            view=view
+        )
+    return closure
+async def done(interaction:dc.Interaction,whatever:Any):
+    await interaction.response.edit_message(view=None,content="All set! Please dismiss this message.")
+
 def add_event(client:Client):
     async def closure(interaction: dc.Interaction):
-        if not interaction.user.resolved_permissions.administrator:
+        allowed,why = Permissions.check(client,interaction,{CREATE_EVENT_PERM.identifier})
+        if not allowed:
+            client.logger.warning(f"Blocked attempt to run add_event by uid {interaction.user.id} ({interaction.user.name}/{interaction.user.display_name})")
             await interaction.response.send_message(
-                content="You must be an administrator.",
+                content=(
+                    "You're not allowed to run this command. This attempt has been logged.\n"
+                    f"Reason: {why}"
+                ),
                 ephemeral=True
             )
             return
@@ -64,22 +167,27 @@ def add_event(client:Client):
 def add_event_response(client:Client):
     async def closure(interaction: dc.Interaction, evt:pers.Event):
         evt = ui.aui.cleanup_dict(evt)
-        if interaction.guild_id not in client.periodic_events['servers']:
+        if str(interaction.guild_id) not in client.periodic_events['servers']:
             client.periodic_events['servers'][str(interaction.guild_id)]={
                 'events':{},
                 'pools':{}
             }
         client.periodic_events['servers'][str(interaction.guild_id)]['events'][evt['name']]=evt
         with open(client.periodic_events_path,'w') as o_f:
-            json.dump(client.periodic_events,o_f)
+            json.dump(client.periodic_events,o_f,indent=4)
         client.scheduler.reschedule(client)
         await interaction.response.edit_message(content="Aight. Seems to be werkin'.",view=None)
     return closure
 def message_pools(client:Client):
     async def closure(interaction:dc.Interaction):
-        if not interaction.user.resolved_permissions.administrator:
+        allowed,why = Permissions.check(client,interaction,{MSG_POOL_PERM.identifier})
+        if not allowed:
+            client.logger.warning(f"Blocked attempt to run message_pools by uid {interaction.user.id} ({interaction.user.name}/{interaction.user.display_name})")
             await interaction.response.send_message(
-                content="You must be an administrator.",
+                content=(
+                    "You're not allowed to run this command. This attempt has been logged.\n"
+                    f"Reason: {why}"
+                ),
                 ephemeral=True
             )
             return
@@ -153,7 +261,7 @@ def message_pools(client:Client):
                 if pool is not None:
                     client.periodic_events['servers'][str(interaction.guild_id)]['pools'][pool['name']]=pool
                     with open(client.periodic_events_path,'w') as o_f:
-                        json.dump(client.periodic_events,o_f)
+                        json.dump(client.periodic_events,o_f,indent=4)
                 await interaction.response.edit_message(
                     content=self.describe(),
                     view=self
@@ -175,14 +283,14 @@ def message_pools(client:Client):
                 )
             async def pool_made(self,interaction:dc.Interaction,pool:pers.MessagePool):
                 pool=ui.aui.cleanup_dict(pool)
-                if interaction.guild_id not in client.periodic_events['servers']:
-                    client.periodic_events['servers'][interaction.guild_id]={
+                if str(interaction.guild_id) not in client.periodic_events['servers']:
+                    client.periodic_events['servers'][str(interaction.guild_id)]={
                         'events':{},
                         'pools':{}
                     }
                 client.periodic_events['servers'][str(interaction.guild_id)]['pools'][pool['name']]=pool
                 with open(client.periodic_events_path,'w') as o_f:
-                    json.dump(client.periodic_events,o_f)
+                    json.dump(client.periodic_events,o_f,indent=4)
                 await self.done_adding(interaction,pool)
             async def done_adding(self,interaction:dc.Interaction,whatevs):
                 await interaction.response.edit_message(

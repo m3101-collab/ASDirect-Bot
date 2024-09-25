@@ -37,4 +37,4 @@ class Database:
         Serialise a command database into a JSON file.
         """
         with open(path,'w') as o_f:
-            json.dump(self.servers,o_f)
+            json.dump(self.servers,o_f,indent=4)

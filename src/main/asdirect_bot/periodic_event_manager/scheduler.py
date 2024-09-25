@@ -3,8 +3,9 @@ import discord as dc
 from ..generic_client import Client
 from datetime import datetime,timedelta
 from . import persistence as pers
-from typing import List,Tuple,Dict,Callable,Coroutine,Any,Literal
+from typing import List,Tuple,Dict,Callable,Coroutine,Any,Literal,TypedDict
 import re
+import os
 from logging import Logger
 import asyncio
 
@@ -21,7 +22,10 @@ class Timer:
     def cancel(self):
         self._task.cancel()
 
-async def handle_sendmesssage(logger:Logger,client:Client,command:pers.MessageCommandParams, guild_id:int, command_name:str):
+class HandlerResponse(TypedDict):
+    used_pools:List[str]
+
+async def handle_sendmesssage(logger:Logger,client:Client,command:pers.MessageCommandParams, guild_id:int, command_name:str)->HandlerResponse:
     guild = client.get_guild(guild_id)
     if guild is None:
         return
@@ -41,11 +45,6 @@ async def handle_sendmesssage(logger:Logger,client:Client,command:pers.MessageCo
             replacement = pool['defaultmessage']
             if len(pool['messages'])!=0:
                 replacement = pool['messages'][0]
-                pool['messages']=pool['messages'][1:]
-                if pool['mode']=='Cycle':
-                    pool['messages'].append(replacement)
-                with open(client.periodic_events_path,'w') as o_f:
-                    json.dump(client.periodic_events,o_f)
             content = content.replace(f"%%{name}%%",replacement)
             used_pools[name]=replacement
     try:
@@ -58,14 +57,17 @@ async def handle_sendmesssage(logger:Logger,client:Client,command:pers.MessageCo
         )
     except dc.errors.Forbidden as e:
         logger.error(f"Permissions insufficient for sending messages at guild {guild.name} (channel #{channel.name}) - {e.status} Code {e.code} {e.text}")
+    return {
+        'used_pools':list(used_pools.keys())
+    }
 
-async def handle_changeperms(logger:Logger,client:Client,command:pers.ChannelPermissionCommandParams,guild_id:int, command_name:str):
+async def handle_changeperms(logger:Logger,client:Client,command:pers.ChannelPermissionCommandParams,guild_id:int, command_name:str)->HandlerResponse:
     guild = client.get_guild(guild_id)
     if guild is None:
-        return
+        return {}
     channel = guild.get_channel(command['channel_id'])
     if channel is None:
-        return
+        return {}
     logger.info(f"Updating permissions at guild {guild.name}, channel {channel.name}")
     for role_id in command['role_ids']:
         role = guild.get_role(role_id)
@@ -93,7 +95,8 @@ async def handle_changeperms(logger:Logger,client:Client,command:pers.ChannelPer
                 )
             except dc.errors.Forbidden as e:
                 logger.error(f"Permissions insufficient for setting roles at guild {guild.name} (channel #{channel.name}) - {e.status} Code {e.code} {e.text}")
-                return
+                return {}
+    return {}
 
 class Scheduler:
     handlers:Dict[str,Callable[[Logger,Client,Any,int,str],Coroutine]] =   {
@@ -108,22 +111,34 @@ class Scheduler:
         ran = False
         now = datetime.now()
         if self.scheduled is not None:
+            used_pools = []
             for time,name,action,guild in self.scheduled:
                 if time<=now:
                     for command in action['commands']:
                         if command['type'] in Scheduler.handlers:
-                           ran=True
-                           await Scheduler.handlers[command['type']](
+                            ran=True
+                            response: HandlerResponse = await Scheduler.handlers[command['type']](
                                 self.logger,
                                 client,
                                 command['params'],
                                 guild,
                                 name
-                           )
+                            )
+                            used_pools = used_pools+response.get('used_pools',[])
                         else:
                            self.logger.warn(f"No handler for command type \"{command['type']}\"")
                 else:
                     break
+            pools:Dict[str,pers.MessagePool] = client.periodic_events.get('servers',{}).get(str(guild),{}).get('pools',{})
+            for pool in used_pools:
+                if len(pools[pool]['messages'])>0:
+                    msg = pools[pool]['messages'][0]
+                    pools[pool]['messages'] = pools[pool]['messages'][1:]+([msg] if pools[pool]['mode']=='Cycle' else [])
+            events_path = os.environ.get("EVENTS_PATH")
+            if events_path is None:
+                raise LookupError("Environment variable EVENTS_PATH not found!")
+            with open(events_path,"w") as o_f:
+                json.dump(client.periodic_events,o_f,indent=4)
         seconds_till_next = (
             60*60 if (
                 (self.scheduled is None)
@@ -149,7 +164,9 @@ class Scheduler:
         self.scheduled = resolve_schedules(client)
         if len(self.scheduled)>0:
             self.logger.info(f"Rescheduling events... Next event is at {self.scheduled[0][0]}")
-        await self.check_schedules(client)
+            await self.check_schedules(client)
+        else:
+            self.logger.info("Scheduling: no events on queue.")
 
 def set_datetime(base:datetime,year:None|int = None, month:None|int = None,day:None|int = None, hour:None|int=None)->datetime:
     return datetime(
@@ -222,9 +239,10 @@ def resolve_schedules(client:Client) -> List[Tuple[datetime,str,pers.ScheduledAc
     servers:Dict[int,pers.Server] = client.periodic_events.get('servers',{})
     now = datetime.now()
     return sorted([
-        (schedule,name,action,int(id))
+        ((schedule,name,action,int(id)) if name!="TRIGGERMENOW" else (datetime.now(),name,action,int(id)))
         for id,val in servers.items()
         for name,event in val['events'].items()
         for action in event['actions']
         for schedule in [sorted([next_occurrence(now,schedule) for schedule in action['schedules']])[0]]
+        if event.get('enabled',False)
     ])

@@ -16,10 +16,13 @@ class Client(dc.Client):
         ) -> None:
         super().__init__(intents=intents, **options)
         self.log_handler = logging.StreamHandler()
+        formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+        self.log_handler.setFormatter(formatter)
         log_path = os.environ.get("LOG_PATH")
         if log_path is None:
             raise LookupError("Environment variable LOG_PATH not found!")
         self.file_log_handler = logging.FileHandler(log_path)
+        self.file_log_handler.setFormatter(formatter)
         self.logger = logging.getLogger("GenericClient")
         self.logger.setLevel(logging.INFO)
         self.logger.addHandler(self.log_handler)

@@ -1,8 +1,10 @@
+from ..permissions_mgt.persistence import Permissions,permission
+RUN_CMD_PERM = permission("Run custom bot commands","RCMD")
+CREATE_CMD_PERM = permission("Create new custom commands","CCMD")
 import discord as dc
 import os
 from ..generic_client import Client
 from .sync_commands import sync_guild
-from . import permissions
 from .persistence import Database
 from .UI import management_admin_screen
 from .sync_commands import sync_guild
@@ -10,6 +12,7 @@ import logging
 import pathlib as pl
 
 GENERIC_CLIENT_MODULE_NAME = "ReferenceCommands"
+
 
 def sync_commands(client:Client):
     async def handler(interaction: dc.Interaction):
@@ -28,12 +31,15 @@ def sync_commands(client:Client):
     return handler
 def management_screen(client:Client):
     async def handler(interaction: dc.Interaction):
-        #TODO: Check for advanced permissions
-        if not permissions.has_permission(interaction,{'admin'}):
+        allowed,why = Permissions.check(client,interaction,{CREATE_CMD_PERM.identifier})
+        if not allowed:
+            client.logger.warning(f"Blocked attempt to run management_screen (command creation) by uid {interaction.user.id} ({interaction.user.name}/{interaction.user.display_name})")
             await interaction.response.send_message(
-                ephemeral=True,
-                content = "You do not have access to this command!\n"
-                "Currently, only admins can run this command."
+                content=(
+                    "You're not allowed to run this command. This attempt has been logged.\n"
+                    f"Reason: {why}"
+                ),
+                ephemeral=True
             )
             return
         await interaction.response.send_message(

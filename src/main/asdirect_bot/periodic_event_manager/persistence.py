@@ -140,6 +140,7 @@ class ScheduledAction(TypedDict):
 class Event(TypedDict):
     name:str
     actions:List[ScheduledAction]
+    enabled:bool
 
 @aui.annotate(
     "Message Pool",

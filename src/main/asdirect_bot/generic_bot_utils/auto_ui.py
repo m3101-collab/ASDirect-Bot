@@ -157,7 +157,7 @@ class View[T](BaseEditView):
     async def cb_select(self,opt:List[str],interaction:dc.Interaction):
         opt:str=opt[0]
         self.current=opt
-        viewer = View.edit_viewer[self.viewtypes[opt]]
+        viewer = View.edit_viewer[self.viewtypes[opt]] if ((opt not in self.props) or (self.props[opt].custom_view is None)) else self.props[opt].custom_view
         view = viewer(self.set,type=self.types[opt],original_interaction=self.orig_interaction)
         view.content=(
             (
@@ -300,7 +300,7 @@ class LongStrView(BaseEditView[str]):
         parent=self
         class Modal(dc.ui.Modal):
             def __init__(self) -> None:
-                super().__init__(title="Text Input")
+                super().__init__(title="Paragraph")
                 self.value = dc.ui.TextInput(label="",style=dc.TextStyle.paragraph)
                 self.add_item(self.value)
             async def on_submit(self, interaction: dc.Interaction) -> Coroutine[Any, Any, None]:
@@ -341,6 +341,20 @@ class IntView(BaseEditView[int]):
         super().__init__(cb, req="- Must not be empty\n- Must be a number", content=content, timeout=timeout, original_interaction=original_interaction)
         self.value = dc.ui.TextInput(label="Type a number:",style=dc.TextStyle.short)
         self.add_item(self.value)
+@edit_viewer_for(bool)
+class BoolView(BaseEditView[bool]):
+    def confirmed(self):
+        return self.value
+    def describe(self) -> str:
+        return f"Current value: {'on' if self.value else 'off'}"
+    def __init__(self, cb: Callable[[dc.Interaction, Any], Coroutine[None, None, None]], type: Type, content:str="", *, timeout: float|None = None, original_interaction:dc.Interaction):
+        super().__init__(cb, req="- Must not be empty\n- Must be a number", content=content, timeout=timeout, original_interaction=original_interaction)
+        self.toggle = CBButton(self.toggled,label="Toggle",style=dc.TextStyle.short)
+        self.add_item(self.toggle)
+        self.value=True
+    async def toggled(self,interaction:dc.Interaction,but:dc.Button=None):
+        self.value=not self.value
+        await interaction.response.edit_message(content=self.content+'\n'+self.describe())
 
 @edit_viewer_for(Literal)
 class LiteralView(BaseEditView[str]):
@@ -452,6 +466,10 @@ def cleanup_dict(v:Dict)->Dict:
                     continue
     return v
 
+
+@text_renderer_for(bool)
+def RenderBool(b:bool)->str:
+    return "On" if b else "Off"
 @text_renderer_for(float)
 @text_renderer_for(int)
 def RenderStringify(v:Any)->str:

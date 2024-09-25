@@ -10,7 +10,8 @@ def main():
         intents=dc.Intents.default(),
         submodules={
             "asdirect_bot.reference_command_management.discord_commands",
-            "asdirect_bot.periodic_event_manager.discord_commands"
+            "asdirect_bot.periodic_event_manager.discord_commands",
+            "asdirect_bot.permissions_mgt.discord_commands"
         }
     )
     client.run(token,log_handler=client.log_handler)
